@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handy Extension Test - Meraki Lightning Simulation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f6f9;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .lightning-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .contenteditable {
+            min-height: 100px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+        }
+        .iframe-container {
+            border: 2px solid #0070d2;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        iframe {
+            width: 100%;
+            height: 300px;
+            border: none;
+        }
+        .instructions {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .instructions h2 {
+            margin-top: 0;
+            color: #0070d2;
+        }
+        .instructions ul {
+            margin: 10px 0;
+        }
+        .instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Handy Extension Test - Meraki Lightning Simulation</h1>
+        
+        <div class="instructions">
+            <h2>Testing Instructions</h2>
+            <ul>
+                <li>Make sure the Handy extension is installed and enabled</li>
+                <li>Create a test replacement (e.g., "//ty" → "Thank you") in the extension options</li>
+                <li>Try typing the keyword + space in each test field below</li>
+                <li>Check the browser console for debug messages</li>
+                <li>The iframe below simulates a CK Editor environment</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h3>1. Standard Input Field</h3>
+            <input type="text" class="lightning-input" placeholder="Type here: //ty ">
+        </div>
+
+        <div class="test-section">
+            <h3>2. Textarea Field</h3>
+            <textarea class="lightning-input" rows="4" placeholder="Type here: //ty "></textarea>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Contenteditable Div (Lightning Style)</h3>
+            <div class="contenteditable" contenteditable="true" data-aura-rendered-by="test" style="min-height: 100px;">
+                Type here: //ty 
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. CK Editor Simulation (Iframe)</h3>
+            <div class="iframe-container">
+                <iframe id="ckeditor-iframe" src="about:blank"></iframe>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>5. Salesforce Lightning Elements</h3>
+            <div class="slds-form-element slds-hint-parent" data-aura-rendered-by="test">
+                <div class="slds-form-element__control">
+                    <div class="uiInput uiInput--default" data-aura-class="uiInput uiInput--default">
+                        <div class="forceContentFileDroppableZone uiInput oneIframeComposer uiInput--default">
+                            <div class="oneAlohaPage">
+                                <div class="content iframe-parent">
+                                    <div class="contenteditable" contenteditable="true" style="min-height: 80px; border: 1px solid #ccc; padding: 8px;">
+                                        Type here: //ty 
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Create CK Editor simulation in iframe
+        const iframe = document.getElementById('ckeditor-iframe');
+        iframe.onload = function() {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            iframeDoc.open();
+            iframeDoc.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>CK Editor Simulation</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        .cke_editable { 
+                            min-height: 200px; 
+                            border: 1px solid #ccc; 
+                            padding: 10px; 
+                            background: white;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h3>CK Editor Simulation</h3>
+                    <div class="cke_editable" contenteditable="true" data-cke-editor="true">
+                        Type here: //ty 
+                    </div>
+                    <p><small>This simulates a CK Editor iframe environment</small></p>
+                </body>
+                </html>
+            `);
+            iframeDoc.close();
+        };
+
+        // Add some test replacements for demonstration
+        console.log('Handy Test: Page loaded, ready for testing');
+        
+        // Simulate extension data (for testing without actual extension)
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+            chrome.storage.sync.set({
+                replacements: {
+                    "//ty": "Thank you",
+                    "//br": "Best regards,",
+                    "//sig": "Best regards,\nJohn Doe\nSenior Developer"
+                },
+                enabled: true
+            });
+        }
+    </script>
+</body>
+</html> 
