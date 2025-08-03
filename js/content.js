@@ -4,27 +4,27 @@ if (typeof window.handyInitialized === 'undefined') {
   
   let replacements = {};
   let enabled = true;
-  let isMerakiDomain = false;
+  let universalReplacer = null;
+  let observers = []; // Track mutation observers for cleanup
+  let eventListeners = []; // Track event listeners for cleanup
+  let iframeInjectionInterval = null; // Track iframe injection interval
 
-// Check if we're on a Meraki Lightning domain
-const checkMerakiDomain = () => {
-  const currentDomain = window.location.hostname;
-  isMerakiDomain = currentDomain.includes('meraki.lightning.force.com') || 
-                   currentDomain.includes('lightning.force.com') ||
-                   currentDomain.includes('salesforce.com');
-  console.log('Handy: Detected domain:', currentDomain, 'isMeraki:', isMerakiDomain);
-};
 
 // Load replacements and enabled state from storage
 const loadData = () => {
   chrome.storage.sync.get(['replacements', 'enabled'], (data) => {
     replacements = data.replacements || {};
     enabled = data.enabled === undefined ? true : data.enabled;
-    console.log('Handy: Loaded replacements:', Object.keys(replacements).length, 'enabled:', enabled);
     
-    // Notify iframes after loading data
-    if (window.handyNotifyIframes) {
-      setTimeout(window.handyNotifyIframes, 100);
+    // Initialize or update universal replacer
+    const UniversalReplacerClass = typeof UniversalReplacer !== 'undefined' ? UniversalReplacer : 
+                                   (typeof window !== 'undefined' && window.UniversalReplacer) ? window.UniversalReplacer : null;
+    
+    if (!universalReplacer && UniversalReplacerClass) {
+      universalReplacer = new UniversalReplacerClass(new Map(Object.entries(replacements)), enabled);
+    } else if (universalReplacer) {
+      universalReplacer.updateReplacements(new Map(Object.entries(replacements)));
+      universalReplacer.updateEnabled(enabled);
     }
   });
 };
@@ -36,302 +36,75 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   }
 });
 
-// Enhanced function to handle text replacement with multiple strategies
-const handleInput = (e) => {
-  if (!enabled) return;
-
-  const target = e.target;
-  
-  // Ignore password fields and non-text inputs
-  if (target.type === 'password' || (target.tagName === 'INPUT' && !['text', 'search', 'url', 'tel', 'email'].includes(target.type))) {
-    return;
-  }
-
-  // Get text content using multiple strategies
-  let text = '';
-  let isContentEditable = false;
-  
-  // Strategy 1: Direct value/textContent
-  if (target.isContentEditable) {
-    text = target.textContent || target.innerText || '';
-    isContentEditable = true;
-  } else {
-    text = target.value || '';
-  }
-  
-  // Strategy 2: For iframes and complex editors, try to get text from selection
-  if (!text && isMerakiDomain) {
-    const selection = window.getSelection();
-    if (selection && selection.toString()) {
-      text = selection.toString();
-    }
-  }
-
-  if (text === undefined || text.length === 0) return;
-
-  const triggerChar = text.slice(-1);
-  const triggerRegex = /[\s.,;!?]/; // Matches whitespace, period, comma, etc.
-
-  // Check for trigger character
-  if (triggerRegex.test(triggerChar)) {
-    const textBeforeTrigger = text.slice(0, -1);
-
-    // Find the longest matching keyword
-    let longestMatch = '';
-    for (const keyword in replacements) {
-      if (textBeforeTrigger.endsWith(keyword) && keyword.length > longestMatch.length) {
-        longestMatch = keyword;
-      }
-    }
-
-    if (longestMatch) {
-      const replacement = replacements[longestMatch];
-      
-      // To prevent feedback loops, check if the replacement is already done
-      if (textBeforeTrigger.endsWith(replacement)) {
-        return;
-      }
-
-      console.log('Handy: Replacing', longestMatch, 'with', replacement);
-
-      // Try multiple replacement strategies
-      let replacementSuccessful = false;
-
-      // Strategy 1: Standard contenteditable replacement
-      if (isContentEditable && !replacementSuccessful) {
-        replacementSuccessful = tryContentEditableReplacement(target, longestMatch, replacement, triggerChar);
-      }
-
-      // Strategy 2: Standard input/textarea replacement
-      if (!isContentEditable && !replacementSuccessful) {
-        replacementSuccessful = tryInputReplacement(target, longestMatch, replacement, triggerChar);
-      }
-
-      // Strategy 3: Aggressive iframe content replacement (for Meraki)
-      if (isMerakiDomain && !replacementSuccessful) {
-        replacementSuccessful = tryMerakiReplacement(target, longestMatch, replacement, triggerChar);
-      }
-
-      // Strategy 4: Document-level replacement as last resort
-      if (!replacementSuccessful) {
-        replacementSuccessful = tryDocumentReplacement(longestMatch, replacement, triggerChar);
-      }
-
-      if (replacementSuccessful) {
-        console.log('Handy: Replacement successful');
-      } else {
-        console.log('Handy: All replacement strategies failed');
-      }
-    }
-  }
-};
-
-// Strategy 1: Standard contenteditable replacement
-const tryContentEditableReplacement = (target, keyword, replacement, triggerChar) => {
-  try {
-    const selection = window.getSelection();
-    if (!selection.rangeCount) return false;
-
-    const range = selection.getRangeAt(0);
-    const textNode = range.startContainer;
-
-    if (textNode.nodeType === Node.TEXT_NODE) {
-      const originalText = textNode.textContent;
-      const textToReplace = keyword + triggerChar;
-      
-      if (originalText.endsWith(textToReplace)) {
-        const newTextNodeValue = originalText.substring(0, originalText.length - textToReplace.length) + replacement + triggerChar;
-        
-        // For contenteditable elements, use innerHTML to preserve formatting
-        if (target.isContentEditable) {
-          const currentHTML = target.innerHTML;
-          const newHTML = currentHTML.substring(0, currentHTML.length - textToReplace.length) + replacement.replace(/\n/g, '<br>') + triggerChar;
-          target.innerHTML = newHTML;
-          
-          // Move cursor to end
-          const newRange = document.createRange();
-          newRange.selectNodeContents(target);
-          newRange.collapse(false);
-          selection.removeAllRanges();
-          selection.addRange(newRange);
-        } else {
-          textNode.textContent = newTextNodeValue;
-          
-          // Move the cursor to the end
-          range.setStart(textNode, newTextNodeValue.length);
-          range.setEnd(textNode, newTextNodeValue.length);
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
-        return true;
-      }
-    }
-  } catch (error) {
-    console.log('Handy: Contenteditable replacement failed:', error);
-  }
-  return false;
-};
-
-// Strategy 2: Standard input/textarea replacement
-const tryInputReplacement = (target, keyword, replacement, triggerChar) => {
-  try {
-    const cursorPosition = target.selectionStart;
-    const text = target.value;
-    const textToReplace = keyword + triggerChar;
-    
-    if (text.endsWith(textToReplace)) {
-      const newText = text.substring(0, text.length - textToReplace.length) + replacement + triggerChar;
-      target.value = newText;
-
-      // Restore cursor position
-      const newCursorPosition = cursorPosition - textToReplace.length + (replacement.length + 1);
-      target.setSelectionRange(newCursorPosition, newCursorPosition);
-      return true;
-    }
-  } catch (error) {
-    console.log('Handy: Input replacement failed:', error);
-  }
-  return false;
-};
-
-// Strategy 3: Aggressive Meraki-specific replacement
-const tryMerakiReplacement = (target, keyword, replacement, triggerChar) => {
-  try {
-    // Look for iframes and try to inject content script into them
-    const iframes = document.querySelectorAll('iframe');
-    for (const iframe of iframes) {
-      try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        if (iframeDoc) {
-          // Try to find editable elements in iframe
-          const editableElements = iframeDoc.querySelectorAll('[contenteditable="true"], textarea, input[type="text"]');
-          for (const element of editableElements) {
-            if (element.textContent && element.textContent.endsWith(keyword + triggerChar)) {
-              const newText = element.textContent.substring(0, element.textContent.length - (keyword + triggerChar).length) + replacement + triggerChar;
-              // Use innerHTML for contenteditable to preserve formatting
-              if (element.isContentEditable) {
-                element.innerHTML = newText.replace(/\n/g, '<br>');
-              } else {
-                element.textContent = newText;
-              }
-              return true;
-            }
-          }
-        }
-      } catch (error) {
-        // Cross-origin iframe, can't access
-        console.log('Handy: Cannot access iframe content (cross-origin)');
-      }
-    }
-
-    // Try to find CK Editor specific elements
-    const ckEditorElements = document.querySelectorAll('.cke_editable, [data-cke-editor]');
-    for (const element of ckEditorElements) {
-      if (element.textContent && element.textContent.endsWith(keyword + triggerChar)) {
-        const newText = element.textContent.substring(0, element.textContent.length - (keyword + triggerChar).length) + replacement + triggerChar;
-        // Use innerHTML for CK Editor to preserve formatting
-        element.innerHTML = newText.replace(/\n/g, '<br>');
-        return true;
-      }
-    }
-
-    // Try to find Salesforce Lightning specific elements
-    const lightningElements = document.querySelectorAll('[data-aura-rendered-by], .uiInput, .forcePageBlockItem');
-    for (const element of lightningElements) {
-      if (element.textContent && element.textContent.endsWith(keyword + triggerChar)) {
-        const newText = element.textContent.substring(0, element.textContent.length - (keyword + triggerChar).length) + replacement + triggerChar;
-        // Use innerHTML for contenteditable elements to preserve formatting
-        if (element.isContentEditable) {
-          element.innerHTML = newText.replace(/\n/g, '<br>');
-        } else {
-          element.textContent = newText;
-        }
-        return true;
-      }
-    }
-  } catch (error) {
-    console.log('Handy: Meraki replacement failed:', error);
-  }
-  return false;
-};
-
-// Strategy 4: Document-level replacement as last resort
-const tryDocumentReplacement = (keyword, replacement, triggerChar) => {
-  try {
-    const selection = window.getSelection();
-    if (selection && selection.toString().endsWith(keyword + triggerChar)) {
-      const range = selection.getRangeAt(0);
-      const textToReplace = keyword + triggerChar;
-      
-      // Create a new text node with the replacement
-      const newTextNode = document.createTextNode(replacement + triggerChar);
-      
-      // Replace the selected content
-      range.deleteContents();
-      range.insertNode(newTextNode);
-      
-      // Move cursor to end
-      range.setStartAfter(newTextNode);
-      range.setEndAfter(newTextNode);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      return true;
-    }
-  } catch (error) {
-    console.log('Handy: Document replacement failed:', error);
-  }
-  return false;
-};
-
-// Enhanced event listener setup with multiple strategies
+// Enhanced event listener setup with universal approach
 const setupEventListeners = () => {
   // Strategy 1: Standard input event listener
-  document.addEventListener('input', handleInput, true);
-  
-  // Strategy 2: Keydown event for better iframe support
-  document.addEventListener('keydown', (e) => {
-    if (e.key === ' ' || e.key === '.' || e.key === ',' || e.key === ';' || e.key === '!' || e.key === '?') {
-      setTimeout(() => handleInput(e), 10); // Small delay to ensure text is updated
+  const inputHandler = (e) => {
+    if (universalReplacer) {
+      universalReplacer.handleInput(e);
     }
-  }, true);
+  };
+  document.addEventListener('input', inputHandler, true);
+  eventListeners.push({ element: document, type: 'input', handler: inputHandler, useCapture: true });
   
-  // Strategy 3: Mutation observer for dynamic content (especially for Meraki)
-  if (isMerakiDomain) {
+  // Strategy 2: Keydown event for better trigger detection
+  const keydownHandler = (e) => {
+    if (e.key === ' ' || e.key === '.' || e.key === ',' || e.key === ';' || e.key === '!' || e.key === '?') {
+      // Prevent double handling by checking if this is a synthetic event
+      if (e.isTrusted === false) {
+        return;
+      }
+      
+      setTimeout(() => {
+        if (universalReplacer) {
+          // Create a synthetic input event to ensure we get the updated text
+          const inputEvent = new Event('input', { bubbles: true });
+          inputEvent.isTrusted = false; // Mark as synthetic
+          e.target.dispatchEvent(inputEvent);
+          universalReplacer.handleInput(inputEvent);
+        }
+      }, 10);
+    }
+  };
+  document.addEventListener('keydown', keydownHandler, true);
+  eventListeners.push({ element: document, type: 'keydown', handler: keydownHandler, useCapture: true });
+  
+  // Strategy 3: Mutation observer for dynamic content (optimized)
     const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'childList') {
-          mutation.addedNodes.forEach((node) => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              // Check if new iframes were added
-              let iframes = [];
-              if (node.querySelectorAll) {
-                const foundIframes = node.querySelectorAll('iframe');
-                iframes = Array.from(foundIframes);
-              }
-              if (node.tagName === 'IFRAME') {
-                iframes.push(node);
-              }
-              
+      // Filter mutations to only process relevant ones
+      const relevantMutations = mutations.filter(mutation => 
+        mutation.type === 'childList' && 
+        (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
+      );
+      
+      if (relevantMutations.length === 0) return;
+      
+      relevantMutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check if new editable elements were added
+            const editableElements = node.querySelectorAll ? Array.from(node.querySelectorAll('[contenteditable="true"], textarea, input[type="text"]')) : [];
+            if (node.matches && node.matches('[contenteditable="true"], textarea, input[type="text"]')) {
+              editableElements.push(node);
+            }
+            
+            // Note: We use event delegation via document listeners instead of individual element listeners
+            // This is more performant and handles all elements automatically
+
+            // Check if new iframes were added and inject handler
+            const iframes = node.querySelectorAll ? Array.from(node.querySelectorAll('iframe')) : [];
+            if (node.tagName === 'IFRAME') {
+              iframes.push(node);
+            }
+            
+            // Only inject if we found iframes
+            if (iframes.length > 0) {
               iframes.forEach(iframe => {
-                setTimeout(() => {
-                  try {
-                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                    if (iframeDoc) {
-                      iframeDoc.addEventListener('input', handleInput, true);
-                      iframeDoc.addEventListener('keydown', (e) => {
-                        if (e.key === ' ' || e.key === '.' || e.key === ',' || e.key === ';' || e.key === '!' || e.key === '?') {
-                          setTimeout(() => handleInput(e), 10);
-                        }
-                      }, true);
-                    }
-                  } catch (error) {
-                    // Cross-origin iframe
-                  }
-                }, 1000); // Wait for iframe to load
+                injectIntoIframe(iframe);
               });
             }
-          });
-        }
+          }
+        });
       });
     });
     
@@ -339,27 +112,102 @@ const setupEventListeners = () => {
       childList: true,
       subtree: true
     });
-  }
+  observers.push(observer);
 };
 
-// Handle message passing with iframes
-const setupMessagePassing = () => {
-  // Listen for messages from iframes
-  window.addEventListener('message', (event) => {
-    if (event.data && event.data.source === 'handy_iframe') {
-      if (event.data.type === 'HANDY_GET_DATA') {
-        // Send data to iframe
-        event.source.postMessage({
-          type: 'HANDY_DATA_UPDATE',
-          source: 'handy_parent',
-          replacements: replacements,
-          enabled: enabled
-        }, '*');
-      } else if (event.data.type === 'HANDY_IFRAME_READY') {
-        console.log('Handy: Iframe ready:', event.data.url);
+// Inject iframe handler into iframe
+const injectIntoIframe = (iframe) => {
+  try {
+    // Get extension ID from current script URL
+    const currentScript = document.currentScript || document.querySelector('script[src*="content.js"]');
+    let extensionId = '';
+    
+    if (currentScript && currentScript.src) {
+      const match = currentScript.src.match(/chrome-extension:\/\/([^\/]+)/);
+      if (match) {
+        extensionId = match[1];
       }
     }
-  });
+    
+    // Fallback: try to get from chrome.runtime
+    if (!extensionId && chrome && chrome.runtime && chrome.runtime.id) {
+      extensionId = chrome.runtime.id;
+    }
+    
+    // If we still don't have an extension ID, skip injection
+    if (!extensionId) {
+      // Try one more fallback: get from chrome.runtime
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+        extensionId = chrome.runtime.id;
+      }
+      
+      if (!extensionId) {
+        return;
+      }
+    }
+    
+    // Wait for iframe to load
+    setTimeout(() => {
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        if (iframeDoc && iframeDoc.readyState !== 'loading') {
+          // Check if already injected
+          if (iframeDoc.querySelector('script[data-handy-iframe-handler]')) {
+            return;
+          }
+
+          // Check if UniversalReplacer is already available in iframe
+          if (iframeDoc.defaultView && iframeDoc.defaultView.UniversalReplacer) {
+            // Just inject the iframe handler
+            const handlerScript = iframeDoc.createElement('script');
+            handlerScript.src = `chrome-extension://${extensionId}/js/iframe-handler.js`;
+            handlerScript.setAttribute('data-handy-iframe-handler', 'true');
+            iframeDoc.head.appendChild(handlerScript);
+            return;
+          }
+
+          // Inject UniversalReplacer first
+          const replacerScript = iframeDoc.createElement('script');
+          replacerScript.src = `chrome-extension://${extensionId}/js/universal-replacement.js`;
+          replacerScript.onload = () => {
+            // Then inject iframe handler
+            const handlerScript = iframeDoc.createElement('script');
+            handlerScript.src = `chrome-extension://${extensionId}/js/iframe-handler.js`;
+            handlerScript.setAttribute('data-handy-iframe-handler', 'true');
+            iframeDoc.head.appendChild(handlerScript);
+          };
+          iframeDoc.head.appendChild(replacerScript);
+        }
+              } catch (error) {
+          // Cross-origin iframe, can't access
+        }
+      }, 1000);
+    } catch (error) {
+      // Iframe not accessible
+    }
+};
+
+  // Handle message passing with iframes
+  const setupMessagePassing = () => {
+    // Listen for messages from iframes
+    const messageHandler = (event) => {
+      if (event.data && (event.data.source === 'handy_iframe' || event.data.source === 'handy_iframe_handler')) {
+        if (event.data.type === 'HANDY_GET_DATA') {
+          // Send data to iframe
+          event.source.postMessage({
+            type: 'HANDY_DATA_UPDATE',
+            source: 'handy_parent',
+            replacements: replacements,
+            enabled: enabled
+          }, '*');
+        } else if (event.data.type === 'HANDY_IFRAME_READY') {
+          // Iframe ready
+        }
+      }
+    };
+  
+  window.addEventListener('message', messageHandler);
+  eventListeners.push({ element: window, type: 'message', handler: messageHandler, useCapture: false });
 
   // Send data updates to all iframes when data changes
   const notifyIframes = () => {
@@ -382,36 +230,124 @@ const setupMessagePassing = () => {
   window.handyNotifyIframes = notifyIframes;
 };
 
+// Cleanup function to prevent memory leaks
+const cleanup = () => {
+  // Clear timers
+  if (universalReplacer && universalReplacer.debounceTimer) {
+    clearTimeout(universalReplacer.debounceTimer);
+  }
+  
+  // Clear iframe monitoring interval
+  if (iframeInjectionInterval) {
+    clearInterval(iframeInjectionInterval);
+    iframeInjectionInterval = null;
+  }
+  
+  // Disconnect observers
+  observers.forEach(observer => {
+    if (observer && typeof observer.disconnect === 'function') {
+      observer.disconnect();
+    }
+  });
+  observers = [];
+  
+  // Remove event listeners
+  eventListeners.forEach(({ element, type, handler, useCapture }) => {
+    if (element && typeof element.removeEventListener === 'function') {
+      element.removeEventListener(type, handler, useCapture);
+    }
+  });
+  eventListeners = [];
+  
+  // Clear global references
+  if (window.handyNotifyIframes) {
+    delete window.handyNotifyIframes;
+  }
+  if (window.handyInitialized) {
+    delete window.handyInitialized;
+  }
+};
+
 // Initialize the extension
 const initialize = () => {
-  checkMerakiDomain();
   loadData();
-  setupEventListeners();
   setupMessagePassing();
   
-  // For Meraki domains, also try to inject into existing iframes
-  if (isMerakiDomain) {
-    setTimeout(() => {
-      const iframes = document.querySelectorAll('iframe');
+  // Wait for UniversalReplacer to be available
+  const waitForUniversalReplacer = () => {
+    // Check if UniversalReplacer is available (either globally or on window)
+    const UniversalReplacerClass = typeof UniversalReplacer !== 'undefined' ? UniversalReplacer : 
+                                   (typeof window !== 'undefined' && window.UniversalReplacer) ? window.UniversalReplacer : null;
+    
+    if (UniversalReplacerClass) {
+      // Initialize universal replacer
+      if (!universalReplacer) {
+        universalReplacer = new UniversalReplacerClass(new Map(Object.entries(replacements)), enabled);
+      }
+      
+      // Wait for document body to be ready before setting up event listeners
+      if (document.body) {
+        setupEventListeners();
+        // Inject into existing iframes
+        injectIntoExistingIframes();
+        // Start continuous iframe monitoring
+        startIframeMonitoring();
+      } else {
+        // Wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', () => {
+          setupEventListeners();
+          // Inject into existing iframes
+          injectIntoExistingIframes();
+          // Start continuous iframe monitoring
+          startIframeMonitoring();
+        });
+        eventListeners.push({ element: document, type: 'DOMContentLoaded', handler: () => {
+          setupEventListeners();
+          injectIntoExistingIframes();
+          startIframeMonitoring();
+        }, useCapture: false });
+      }
+    } else {
+      // UniversalReplacer not ready yet, wait a bit and try again
+      setTimeout(waitForUniversalReplacer, 100);
+    }
+  };
+  
+  // Start waiting for UniversalReplacer
+  waitForUniversalReplacer();
+  
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', cleanup);
+  eventListeners.push({ element: window, type: 'beforeunload', handler: cleanup, useCapture: false });
+};
+
+// Inject into existing iframes
+const injectIntoExistingIframes = () => {
+  const iframes = document.querySelectorAll('iframe');
+  iframes.forEach(iframe => {
+    injectIntoIframe(iframe);
+  });
+};
+
+// Continuous iframe monitoring for dynamic iframes
+const startIframeMonitoring = () => {
+  let lastIframeCount = 0;
+  
+  iframeInjectionInterval = setInterval(() => {
+    const iframes = document.querySelectorAll('iframe');
+    if (iframes.length !== lastIframeCount) {
+      lastIframeCount = iframes.length;
+      
+      // Inject into new iframes
       iframes.forEach(iframe => {
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-          if (iframeDoc) {
-            iframeDoc.addEventListener('input', handleInput, true);
-            iframeDoc.addEventListener('keydown', (e) => {
-              if (e.key === ' ' || e.key === '.' || e.key === ',' || e.key === ';' || e.key === '!' || e.key === '?') {
-                setTimeout(() => handleInput(e), 10);
-              }
-            }, true);
-          }
-        } catch (error) {
-          // Cross-origin iframe
-        }
+        injectIntoIframe(iframe);
       });
-    }, 2000); // Wait for page to fully load
-  }
+    }
+  }, 5000); // Check every 5 seconds instead of 1
 };
 
   // Start the extension
   initialize();
+  
+
 }

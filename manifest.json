@@ -7,7 +7,8 @@
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "*://*.meraki.lightning.force.com/*",
@@ -24,15 +25,16 @@
         "<all_urls>"
       ],
       "js": [
+        "js/universal-replacement.js",
         "js/content.js"
       ],
       "all_frames": true,
-      "run_at": "document_end"
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["js/content.js", "js/iframe-content.js"],
+      "resources": ["js/universal-replacement.js", "js/iframe-handler.js"],
       "matches": ["<all_urls>"]
     }
   ],

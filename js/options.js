@@ -15,6 +15,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let replacements = {};
   let currentlyEditing = null;
 
+  // Constants
+  const MAX_REPLACEMENT_LENGTH = 3500;
+  const MAX_KEYWORD_LENGTH = 100;
+  const INVALID_KEYWORD_CHARS = /[<>:"\\|?*]/; // Characters that could cause issues
+
   const loadData = () => {
     chrome.storage.sync.get(['replacements', 'enabled'], (data) => {
       replacements = data.replacements || {};
@@ -98,9 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const actions = item.querySelector('.actions');
 
     textContainer.innerHTML = `
-      <input type="text" class="edit-keyword" value="${oldKeyword}">
+      <input type="text" class="edit-keyword" value="${oldKeyword}" maxlength="${MAX_KEYWORD_LENGTH}">
       <span class="arrow"> → </span>
-      <textarea class="edit-replacement" rows="3">${oldReplacement}</textarea>
+      <textarea class="edit-replacement" rows="3" maxlength="${MAX_REPLACEMENT_LENGTH}">${oldReplacement}</textarea>
     `;
 
     actions.innerHTML = `
@@ -112,18 +117,44 @@ document.addEventListener('DOMContentLoaded', () => {
     actions.querySelector('.cancel-edit-button').addEventListener('click', () => cancelEdit(item, oldKeyword, oldReplacement));
   };
 
+  const validateKeyword = (keyword) => {
+    if (!keyword || keyword.trim().length === 0) {
+      return { valid: false, error: 'Keyword cannot be empty.' };
+    }
+    if (keyword.length > MAX_KEYWORD_LENGTH) {
+      return { valid: false, error: `Keyword cannot exceed ${MAX_KEYWORD_LENGTH} characters.` };
+    }
+    if (INVALID_KEYWORD_CHARS.test(keyword)) {
+      return { valid: false, error: 'Keyword contains invalid characters.' };
+    }
+    return { valid: true };
+  };
+
+  const validateReplacement = (replacement) => {
+    if (!replacement || replacement.trim().length === 0) {
+      return { valid: false, error: 'Replacement cannot be empty.' };
+    }
+    if (replacement.length > MAX_REPLACEMENT_LENGTH) {
+      return { valid: false, error: `Replacement text cannot exceed ${MAX_REPLACEMENT_LENGTH} characters.` };
+    }
+    return { valid: true };
+  };
+
   const saveEdit = (item, oldKeyword) => {
     const newKeyword = item.querySelector('.edit-keyword').value.trim();
     const newReplacement = item.querySelector('.edit-replacement').value;
 
-    if (!newKeyword || !newReplacement) {
-      showFeedback('Keyword and replacement cannot be empty.', 'error');
+    // Validate inputs
+    const keywordValidation = validateKeyword(newKeyword);
+    if (!keywordValidation.valid) {
+      showFeedback(keywordValidation.error, 'error');
       return;
     }
 
-    if (newReplacement.length > 3500) {
-        showFeedback('Replacement text cannot exceed 3500 characters.', 'error');
-        return;
+    const replacementValidation = validateReplacement(newReplacement);
+    if (!replacementValidation.valid) {
+      showFeedback(replacementValidation.error, 'error');
+      return;
     }
 
     if (oldKeyword !== newKeyword && replacements[newKeyword]) {
@@ -135,6 +166,10 @@ document.addEventListener('DOMContentLoaded', () => {
     replacements[newKeyword] = newReplacement;
 
     chrome.storage.sync.set({ replacements }, () => {
+      if (chrome.runtime.lastError) {
+        showFeedback('Failed to save replacement. Please try again.', 'error');
+        return;
+      }
       showFeedback('Replacement updated.', 'success');
       currentlyEditing = null;
       renderList();
@@ -184,25 +219,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const keyword = keywordInput.value.trim();
     const replacement = replacementInput.value;
 
-    if (replacement.length > 3500) {
-      showFeedback('Replacement text cannot exceed 3500 characters.', 'error');
+    // Validate inputs
+    const keywordValidation = validateKeyword(keyword);
+    if (!keywordValidation.valid) {
+      showFeedback(keywordValidation.error, 'error');
       return;
     }
 
-    if (keyword && replacement) {
-      if (replacements[keyword]) {
-        showFeedback('Keyword already exists.', 'error');
+    const replacementValidation = validateReplacement(replacement);
+    if (!replacementValidation.valid) {
+      showFeedback(replacementValidation.error, 'error');
+      return;
+    }
+
+    if (replacements[keyword]) {
+      showFeedback('Keyword already exists.', 'error');
+      return;
+    }
+
+    replacements[keyword] = replacement;
+    chrome.storage.sync.set({ replacements }, () => {
+      if (chrome.runtime.lastError) {
+        showFeedback('Failed to save replacement. Please try again.', 'error');
         return;
       }
-
-      replacements[keyword] = replacement;
-      chrome.storage.sync.set({ replacements }, () => {
-        showFeedback('Replacement saved.', 'success');
-        form.reset();
-        validateInputs();
-        renderList();
-      });
-    }
+      showFeedback('Replacement saved.', 'success');
+      form.reset();
+      validateInputs();
+      renderList();
+    });
   });
 
   const handleDelete = (keyword) => {
@@ -212,6 +257,10 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         delete replacements[keyword];
         chrome.storage.sync.set({ replacements }, () => {
+          if (chrome.runtime.lastError) {
+            showFeedback('Failed to delete replacement. Please try again.', 'error');
+            return;
+          }
           showFeedback('Replacement deleted.', 'success');
           renderList();
         });
@@ -224,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     feedbackMessage.className = `show ${type}`;
     setTimeout(() => {
       feedbackMessage.className = 'hidden';
-    }, 2000);
+    }, 3000); // Increased timeout for better UX
   };
 
   const validateInputs = () => {
@@ -232,9 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const replacement = replacementInput.value;
     const replacementLength = replacement.length;
 
-    charCounter.textContent = `${replacementLength} / 3500`;
+    charCounter.textContent = `${replacementLength} / ${MAX_REPLACEMENT_LENGTH}`;
 
-    if (replacementLength > 3500) {
+    if (replacementLength > MAX_REPLACEMENT_LENGTH) {
       charCounter.classList.add('error');
       saveButton.disabled = true;
     } else {
@@ -249,7 +298,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   extensionToggle.addEventListener('change', () => {
     const enabled = extensionToggle.checked;
-    chrome.storage.sync.set({ enabled });
+    chrome.storage.sync.set({ enabled }, () => {
+      if (chrome.runtime.lastError) {
+        showFeedback('Failed to update extension state. Please try again.', 'error');
+        extensionToggle.checked = !enabled; // Revert the toggle
+      }
+    });
   });
 
   importButton.addEventListener('click', () => importFile.click());
@@ -262,38 +316,67 @@ document.addEventListener('DOMContentLoaded', () => {
           const importedData = JSON.parse(event.target.result);
           if (importedData.replacements) {
             let hasError = false;
+            let errorMessage = '';
+            
+            // Validate imported data
             for (const key in importedData.replacements) {
-              if (importedData.replacements[key].length > 10000) {
-                showFeedback(`Import failed: Replacement for "${key}" is too long.`, 'error');
+              const keywordValidation = validateKeyword(key);
+              if (!keywordValidation.valid) {
+                errorMessage = `Import failed: Invalid keyword "${key}" - ${keywordValidation.error}`;
+                hasError = true;
+                break;
+              }
+              
+              const replacementValidation = validateReplacement(importedData.replacements[key]);
+              if (!replacementValidation.valid) {
+                errorMessage = `Import failed: Invalid replacement for "${key}" - ${replacementValidation.error}`;
                 hasError = true;
                 break;
               }
             }
-            if (hasError) return;
+            
+            if (hasError) {
+              showFeedback(errorMessage, 'error');
+              return;
+            }
 
             replacements = { ...replacements, ...importedData.replacements };
             chrome.storage.sync.set({ replacements }, () => {
-              showFeedback('Replacements imported.', 'success');
+              if (chrome.runtime.lastError) {
+                showFeedback('Failed to import replacements. Please try again.', 'error');
+                return;
+              }
+              showFeedback('Replacements imported successfully.', 'success');
               renderList();
             });
+          } else {
+            showFeedback('Invalid file format. Please select a valid Handy export file.', 'error');
           }
         } catch (error) {
-          showFeedback('Invalid JSON file.', 'error');
+          showFeedback('Invalid JSON file. Please select a valid Handy export file.', 'error');
         }
+      };
+      reader.onerror = () => {
+        showFeedback('Failed to read file. Please try again.', 'error');
       };
       reader.readAsText(file);
     }
   });
 
   exportButton.addEventListener('click', () => {
-    const data = JSON.stringify({ replacements }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'handy-replacements.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const data = JSON.stringify({ replacements }, null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `handy-replacements-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showFeedback('Replacements exported successfully.', 'success');
+    } catch (error) {
+      showFeedback('Failed to export replacements. Please try again.', 'error');
+    }
   });
 
   loadData();
