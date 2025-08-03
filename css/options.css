@@ -1,0 +1,368 @@
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: #F5F5F5;
+  color: #1C2526;
+  margin: 0;
+  padding: 20px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1C2526;
+    color: #F5F5F5;
+  }
+}
+
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.toggle-container {
+  display: flex;
+  align-items: center;
+}
+
+.toggle-container label {
+  margin-right: 10px;
+}
+
+/* iOS-style toggle switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #34C759;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #34C759;
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.slider.round {
+  border-radius: 24px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+  background-color: #fff;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .add-form {
+    background-color: #2C3E50;
+  }
+}
+
+.add-form input, .add-form textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: box-shadow 0.2s;
+  box-sizing: border-box;
+  font-family: inherit;
+  background-color: #fff;
+  color: #000;
+}
+
+.add-form input:focus, .add-form textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #007AFF;
+}
+
+.add-form textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#char-counter {
+  font-size: 12px;
+  color: #888;
+}
+
+#char-counter.error {
+  color: #FF3B30;
+}
+
+#save-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background-color: #007AFF;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+
+#save-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+#save-button:not(:disabled):active {
+  transform: scale(0.95);
+}
+
+#replacements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.replacement-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@media (prefers-color-scheme: dark) {
+  .replacement-item {
+    background-color: #2C3E50;
+  }
+}
+
+.replacement-item.fade-out {
+  animation: fadeOut 0.3s ease-in forwards;
+}
+
+.replacement-text-container {
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.replacement-keyword, .replacement-value {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.replacement-keyword {
+  font-weight: 500;
+  max-width: 150px; /* Adjust as needed */
+}
+
+.replacement-value {
+  color: #555;
+  max-width: 250px; /* Adjust as needed */
+}
+
+@media (prefers-color-scheme: dark) {
+  .replacement-value {
+    color: #bbb;
+  }
+}
+
+.arrow {
+  margin: 0 5px;
+}
+
+.replacement-item.editing {
+  padding: 10px;
+}
+
+.replacement-item.editing .replacement-text-container {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.edit-keyword, .edit-replacement {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.edit-replacement {
+  resize: vertical;
+  min-height: 50px;
+}
+
+.save-edit-button, .cancel-edit-button {
+  background-color: #007AFF;
+  color: white;
+}
+
+.cancel-edit-button {
+  background-color: #888;
+}
+
+
+.replacement-item .actions button {
+  margin-left: 10px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.edit-button {
+  background-color: #007AFF;
+  color: white;
+}
+
+.delete-button {
+  background-color: #FF3B30;
+  color: white;
+}
+
+#empty-state {
+  text-align: center;
+  color: #888;
+  padding: 20px;
+}
+
+#feedback-message {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+#feedback-message.show {
+  opacity: 1;
+}
+
+#feedback-message.success {
+  background-color: #34C759;
+}
+
+#feedback-message.error {
+  background-color: #FF3B30;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.import-export {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+.import-export button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background-color: #007AFF;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.import-export button:active {
+  transform: scale(0.95);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.9); }
+}
+
+@media (max-width: 480px) {
+  #replacement-form {
+    flex-direction: column;
+  }
+
+  .form-inputs {
+    flex-direction: column;
+  }
+
+  #save-button {
+    margin-left: 0;
+    margin-top: 10px;
+  }
+}

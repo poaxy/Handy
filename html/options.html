@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Handy Options</title>
+  <link rel="stylesheet" href="../css/options.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><img src="../icons/main.png" alt="Handy" style="height: 1.5em; vertical-align: middle;"></h1>
+      <div class="toggle-container">
+        <label for="extension-toggle">Enable Extension</label>
+        <label class="switch">
+          <input type="checkbox" id="extension-toggle">
+          <span class="slider round"></span>
+        </label>
+      </div>
+    </header>
+
+    <main>
+      <form id="replacement-form" class="add-form">
+        <input type="text" id="keyword-input" placeholder="Keyword" aria-label="Keyword">
+        <textarea id="replacement-input" placeholder="Replacement" aria-label="Replacement" maxlength="10000" rows="3"></textarea>
+        <div class="form-footer">
+            <span id="char-counter">0 / 10000</span>
+            <button type="submit" id="save-button" disabled>Save</button>
+        </div>
+      </form>
+
+      <div id="replacements-list"></div>
+      <p id="empty-state" class="hidden">No replacements added yet.</p>
+
+      <div class="import-export">
+        <button id="import-button">Import</button>
+        <button id="export-button">Export</button>
+        <input type="file" id="import-file" accept=".json" style="display: none;">
+      </div>
+    </main>
+
+    <div id="feedback-message" class="hidden"></div>
+  </div>
+
+  <script src="../js/options.js"></script>
+</body>
+</html>
