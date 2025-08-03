@@ -62,10 +62,10 @@ A powerful and user-friendly browser extension that automatically replaces text 
 
 ### Example Usage
 ```
-Keyword: "ty"
+Keyword: "//ty"
 Replacement: "Thank you"
 
-When you type: "ty " (ty + space)
+When you type: "//ty " (//ty + space)
 It becomes: "Thank you "
 ```
 
@@ -128,23 +128,3 @@ Handy/
 - Import validation: Individual replacements cannot exceed 10,000 characters
 - Password fields are automatically excluded for security
 - Works only on web pages (not in browser UI elements)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is open source and available under the [MIT License](LICENSE).
-
-## Support
-
-If you encounter any issues or have feature requests, please open an issue on the project repository.
-
----
-
-**Handy** - Making text input faster and more efficient, one replacement at a time! 🚀 
