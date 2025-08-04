@@ -2,6 +2,9 @@
 if (typeof window.handyInitialized === 'undefined') {
   window.handyInitialized = true;
   
+  // Track if event listeners are already set up
+  let eventListenersSetup = false;
+  
   let replacements = {};
   let enabled = true;
   let universalReplacer = null;
@@ -38,81 +41,89 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 
 // Enhanced event listener setup with universal approach
 const setupEventListeners = () => {
-  // Strategy 1: Standard input event listener
-  const inputHandler = (e) => {
-    if (universalReplacer) {
-      universalReplacer.handleInput(e);
-    }
-  };
-  document.addEventListener('input', inputHandler, true);
-  eventListeners.push({ element: document, type: 'input', handler: inputHandler, useCapture: true });
+  if (eventListenersSetup) {
+    return; // Already set up
+  }
   
-  // Strategy 2: Keydown event for better trigger detection
-  const keydownHandler = (e) => {
-    if (e.key === ' ' || e.key === '.' || e.key === ',' || e.key === ';' || e.key === '!' || e.key === '?') {
-      // Prevent double handling by checking if this is a synthetic event
-      if (e.isTrusted === false) {
-        return;
+  try {
+    // Strategy 1: Standard input event listener
+    const inputHandler = (e) => {
+      if (universalReplacer) {
+        universalReplacer.handleInput(e);
       }
-      
-      setTimeout(() => {
-        if (universalReplacer) {
-          // Create a synthetic input event to ensure we get the updated text
-          const inputEvent = new Event('input', { bubbles: true });
-          inputEvent.isTrusted = false; // Mark as synthetic
-          e.target.dispatchEvent(inputEvent);
-          universalReplacer.handleInput(inputEvent);
+    };
+    document.addEventListener('input', inputHandler, true);
+    eventListeners.push({ element: document, type: 'input', handler: inputHandler, useCapture: true });
+    
+    // Strategy 2: Keydown event for better trigger detection
+    const keydownHandler = (e) => {
+      if (e.key === ' ' || e.key === '.' || e.key === ',' || e.key === ';' || e.key === '!' || e.key === '?') {
+        if (e.isTrusted === false) {
+          return;
         }
-      }, 10);
-    }
-  };
-  document.addEventListener('keydown', keydownHandler, true);
-  eventListeners.push({ element: document, type: 'keydown', handler: keydownHandler, useCapture: true });
-  
-  // Strategy 3: Mutation observer for dynamic content (optimized)
-    const observer = new MutationObserver((mutations) => {
-      // Filter mutations to only process relevant ones
-      const relevantMutations = mutations.filter(mutation => 
-        mutation.type === 'childList' && 
-        (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
-      );
-      
-      if (relevantMutations.length === 0) return;
-      
-      relevantMutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            // Check if new editable elements were added
-            const editableElements = node.querySelectorAll ? Array.from(node.querySelectorAll('[contenteditable="true"], textarea, input[type="text"]')) : [];
-            if (node.matches && node.matches('[contenteditable="true"], textarea, input[type="text"]')) {
-              editableElements.push(node);
-            }
-            
-            // Note: We use event delegation via document listeners instead of individual element listeners
-            // This is more performant and handles all elements automatically
-
-            // Check if new iframes were added and inject handler
-            const iframes = node.querySelectorAll ? Array.from(node.querySelectorAll('iframe')) : [];
-            if (node.tagName === 'IFRAME') {
-              iframes.push(node);
-            }
-            
-            // Only inject if we found iframes
-            if (iframes.length > 0) {
-              iframes.forEach(iframe => {
-                injectIntoIframe(iframe);
-              });
-            }
+        
+        setTimeout(() => {
+          if (universalReplacer) {
+            const inputEvent = new Event('input', { bubbles: true });
+            inputEvent.isTrusted = false;
+            e.target.dispatchEvent(inputEvent);
+            universalReplacer.handleInput(inputEvent);
           }
+        }, 10);
+      }
+    };
+    document.addEventListener('keydown', keydownHandler, true);
+    eventListeners.push({ element: document, type: 'keydown', handler: keydownHandler, useCapture: true });
+    
+    // Strategy 3: Mutation observer for dynamic content
+    const observer = new MutationObserver((mutations) => {
+      try {
+        const relevantMutations = mutations.filter(mutation => 
+          mutation.type === 'childList' && 
+          (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
+        );
+        
+        if (relevantMutations.length === 0) return;
+        
+        relevantMutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const editableElements = node.querySelectorAll ? Array.from(node.querySelectorAll('[contenteditable="true"], textarea, input[type="text"]')) : [];
+              if (node.matches && node.matches('[contenteditable="true"], textarea, input[type="text"]')) {
+                editableElements.push(node);
+              }
+
+              const iframes = node.querySelectorAll ? Array.from(node.querySelectorAll('iframe')) : [];
+              if (node.tagName === 'IFRAME') {
+                iframes.push(node);
+              }
+              
+              if (iframes.length > 0) {
+                iframes.forEach(iframe => {
+                  injectIntoIframe(iframe);
+                });
+              }
+            }
+          });
         });
-      });
+      } catch (error) {
+        console.warn('Handy: Error in mutation observer:', error);
+      }
     });
     
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  observers.push(observer);
+    if (document.body && document.body.nodeType === Node.ELEMENT_NODE) {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      observers.push(observer);
+    }
+    
+    eventListenersSetup = true;
+  } catch (error) {
+    console.warn('Handy: Error setting up event listeners:', error);
+    throw error;
+  }
 };
 
 // Inject iframe handler into iframe
@@ -259,6 +270,9 @@ const cleanup = () => {
   });
   eventListeners = [];
   
+  // Reset setup flag
+  eventListenersSetup = false;
+  
   // Clear global references
   if (window.handyNotifyIframes) {
     delete window.handyNotifyIframes;
@@ -286,25 +300,35 @@ const initialize = () => {
       }
       
       // Wait for document body to be ready before setting up event listeners
-      if (document.body) {
-        setupEventListeners();
-        // Inject into existing iframes
-        injectIntoExistingIframes();
-        // Start continuous iframe monitoring
-        startIframeMonitoring();
-      } else {
-        // Wait for DOM to be ready
+      const setupWithRetry = (retryCount = 0) => {
+        if (document.body) {
+          try {
+            setupEventListeners();
+            injectIntoExistingIframes();
+            startIframeMonitoring();
+          } catch (error) {
+            console.warn('Handy: Error setting up event listeners, retrying...', error);
+            if (retryCount < 10) {
+              setTimeout(() => setupWithRetry(retryCount + 1), 500);
+            }
+          }
+        } else {
+          // Wait for DOM to be ready
+          if (retryCount < 20) {
+            setTimeout(() => setupWithRetry(retryCount + 1), 100);
+          }
+        }
+      };
+      
+      setupWithRetry();
+      
+      // Also listen for DOMContentLoaded as backup
+      if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-          setupEventListeners();
-          // Inject into existing iframes
-          injectIntoExistingIframes();
-          // Start continuous iframe monitoring
-          startIframeMonitoring();
+          setupWithRetry();
         });
         eventListeners.push({ element: document, type: 'DOMContentLoaded', handler: () => {
-          setupEventListeners();
-          injectIntoExistingIframes();
-          startIframeMonitoring();
+          setupWithRetry();
         }, useCapture: false });
       }
     } else {
@@ -332,18 +356,36 @@ const injectIntoExistingIframes = () => {
 // Continuous iframe monitoring for dynamic iframes
 const startIframeMonitoring = () => {
   let lastIframeCount = 0;
+  let lastBodyHash = 0;
   
   iframeInjectionInterval = setInterval(() => {
-    const iframes = document.querySelectorAll('iframe');
-    if (iframes.length !== lastIframeCount) {
-      lastIframeCount = iframes.length;
+    try {
+      const iframes = document.querySelectorAll('iframe');
+      if (iframes.length !== lastIframeCount) {
+        lastIframeCount = iframes.length;
+        
+        // Inject into new iframes
+        iframes.forEach(iframe => {
+          injectIntoIframe(iframe);
+        });
+      }
       
-      // Inject into new iframes
-      iframes.forEach(iframe => {
-        injectIntoIframe(iframe);
-      });
+      // Check if DOM structure changed significantly (for SPAs)
+      if (document.body) {
+        const currentHash = document.body.children.length;
+        if (currentHash !== lastBodyHash && lastBodyHash > 0) {
+          // DOM structure changed, reinitialize if needed
+          if (!universalReplacer || observers.length === 0) {
+            console.log('Handy: DOM structure changed, reinitializing...');
+            setupEventListeners();
+          }
+        }
+        lastBodyHash = currentHash;
+      }
+    } catch (error) {
+      console.warn('Handy: Error in iframe monitoring:', error);
     }
-  }, 5000); // Check every 5 seconds instead of 1
+  }, 5000);
 };
 
   // Start the extension

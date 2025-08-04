@@ -11,9 +11,7 @@
     "clipboardWrite"
   ],
   "host_permissions": [
-    "*://*.meraki.lightning.force.com/*",
-    "*://*.lightning.force.com/*",
-    "*://*.salesforce.com/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "js/background.js"
